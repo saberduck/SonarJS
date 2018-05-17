@@ -27,14 +27,16 @@ spec:
           value: "%WORKER_TOTAL%"
         - name: WORKER_ID
           value: "%WORKER_ID%"
-        - name: OUTPUT_TABLE
-          value: "issues_dinesh"
+        - name: ISSUES_TABLE
+          value: "big_issues"
+        - name: MEASURES_TABLE
+          value: "big_measures"
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /var/secrets/google/key.json
         command: ["sh", "-c"]
         args:
-        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub3/shipit-dinesh.jar\" -o shipit.jar &&
-           java -jar shipit.jar $WORKER_TOTAL $WORKER_ID $OUTPUT_TABLE;
+        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub4/shipit-dinesh.jar\" -o shipit.jar &&
+           java -jar shipit.jar $WORKER_TOTAL $WORKER_ID $ISSUES_TABLE $MEASURES_TABLE;
            sleep 600
           "
         resources:
