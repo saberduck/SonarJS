@@ -88,7 +88,7 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Main-Class>org.sonar.Main</Main-Class>
+                                        <Main-Class>org.sonar.BigQueryReader</Main-Class>
                                     </manifestEntries>
                                 </transformer>
                             </transformers>

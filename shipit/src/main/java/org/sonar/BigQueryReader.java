@@ -35,16 +35,15 @@ public class BigQueryReader {
   private static Table resultTable;
 
   public static void main(String[] args) throws Exception {
-    args = new String[] { "1", "0"};
-
     int totalWorkers = Integer.parseInt(args[0]);
     int workerId = Integer.parseInt(args[1]);
+    String outputTable = args[2];
 
     int insertBatchSize = 1000;
 
     BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
-    Table issuesTable = bigquery.getTable("github_us", "sample_js_files_and_contents");
-    resultTable = bigquery.getTable("github_eu", "issues_copy_dinesh");
+    Table issuesTable = bigquery.getTable("github_us", "js_files_and_contents");
+    resultTable = bigquery.getTable("github_eu", outputTable);
 
     TableResult result = issuesTable.list();
     int total = 0;
