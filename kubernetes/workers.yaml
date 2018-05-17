@@ -17,11 +17,12 @@ spec:
       containers:
       - name: worker
         image: maven:3.5.3-jdk-8
-        ports:
-        - containerPort: 9000
         command: ["sh", "-c"]
         args:
-        - sleep 600
+        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub1/shipit-4.1-SNAPSHOT.jar\" -o shipit.jar &&
+           java -jar shipit.jar;
+           sleep 600
+          "
         resources:
           requests:
             cpu: 0.51
