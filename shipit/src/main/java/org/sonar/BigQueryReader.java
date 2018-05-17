@@ -20,7 +20,6 @@
 package org.sonar;
 
 import com.google.cloud.bigquery.*;
-import com.google.common.util.concurrent.RateLimiter;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.ArrayList;
@@ -30,22 +29,28 @@ import java.util.Map;
 
 public class BigQueryReader {
 
-  static final String PROJECT_ID = "project-test-199515";
+  private static final int INSERT_BATCH_SIZE = 1000;
+  private static final int BIGQUERY_IO_BACKOFF_TIME = 10000;
 
   private static final Analyzer analyzer = new Analyzer();
-  private static final List<InsertAllRequest.RowToInsert> rows = new ArrayList<>();
-  private static Table resultTable;
+
+  private static final List<InsertAllRequest.RowToInsert> issueRows = new ArrayList<>();
+  private static Table resultIssueTable;
+
+  private static final List<InsertAllRequest.RowToInsert> measureRows = new ArrayList<>();
+  private static Table resultMeasureTable;
 
   public static void main(String[] args) throws Exception {
     int totalWorkers = Integer.parseInt(args[0]);
     int workerId = Integer.parseInt(args[1]);
-    String outputTable = args[2];
 
-    int insertBatchSize = 1000;
+    String outputIssueTable = args[2];
+    String outputMeasureTable = args[3];
 
     BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
     Table issuesTable = bigquery.getTable("github_us", "js_files_and_contents");
-    resultTable = bigquery.getTable("github_eu", outputTable);
+    resultIssueTable = bigquery.getTable("github_eu", outputIssueTable);
+    resultMeasureTable = bigquery.getTable("github_eu", outputMeasureTable);
 
     long totalRows = issuesTable.list().getTotalRows();
     long pageSize = totalRows / totalWorkers;
@@ -58,35 +63,61 @@ public class BigQueryReader {
       try {
         TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize - processed), BigQuery.TableDataListOption.startIndex(startIndex + processed));
         for (FieldValueList values : result.getValues()) {
-          System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
+          System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending row buffers: " + issueRows.size() + " issues & " + measureRows.size() + " measures");
           process(values);
 
           processed++;
 
-          if (rows.size() > insertBatchSize) {
-            persistRows();
+          if (issueRows.size() > INSERT_BATCH_SIZE) {
+            persistIssueRows();
+          }
+
+          if (measureRows.size() > INSERT_BATCH_SIZE) {
+            persistMeasureRows();
           }
         }
       } catch (RuntimeException e) {
         // BigQuery IO issues, cool down
-        Thread.sleep(10000);
+        Thread.sleep(BIGQUERY_IO_BACKOFF_TIME);
       }
     }
 
-    System.out.println("Finished: " + processed + " processed rows out of a total of " + totalRows + " rows");
+    if (!issueRows.isEmpty()) {
+      persistIssueRows();
+    }
+
+    if (!measureRows.isEmpty()) {
+      persistMeasureRows();
+    }
+
+    System.out.println("Finished: " + processed + " processed issueRows out of a total of " + totalRows + " issueRows");
 
   }
 
-  private static void persistRows() {
+  private static void persistIssueRows() {
     try {
-      InsertAllResponse response = resultTable.insert(rows);
+      InsertAllResponse response = resultIssueTable.insert(issueRows);
       if (response.hasErrors()) {
-        System.out.println("Error while persisting the batch! " + response.toString());
+        System.out.println("Error while persisting issues! " + response.toString());
       }
 
-      rows.clear();
+      issueRows.clear();
     } catch (RuntimeException e) {
-      System.err.println("Got error while persisting: " + e);
+      System.err.println("Got error while persisting issues: " + e);
+      e.printStackTrace();
+    }
+  }
+
+  private static void persistMeasureRows() {
+    try {
+      InsertAllResponse response = resultMeasureTable.insert(measureRows);
+      if (response.hasErrors()) {
+        System.out.println("Error while persisting measures! " + response.toString());
+      }
+
+      measureRows.clear();
+    } catch (RuntimeException e) {
+      System.err.println("Got error while persisting measures: " + e);
       e.printStackTrace();
     }
   }
@@ -102,6 +133,9 @@ public class BigQueryReader {
       String project = repo_name;
 
       int lines = 1 + StringUtils.countMatches(content, "\n");
+      Map<String, Integer> measuresRow = new HashMap<>();
+      measuresRow.put("LINES", lines);
+      measureRows.add(InsertAllRequest.RowToInsert.of(measuresRow));
 
       int slash = repo_name.indexOf('/');
       if (slash != -1) {
@@ -123,18 +157,18 @@ public class BigQueryReader {
 
         System.out.println("      - (" + ruleKey + ") " + issueMessage + " at line " + lineNumber + " type: " + issueType);
 
-        Map<String, String> row = new HashMap<>();
-        row.put("RULE_KEY", ruleKey);
-        row.put("ISSUE_TYPE", issueType);
-        row.put("COMMIT", ref);
-        row.put("FILE_PATH", path);
-        row.put("GITHUB_ORG", orga);
-        row.put("GITHUB_PRJ", project);
-        row.put("LINE_NUMBER", "" + lineNumber);
-        row.put("ISSUE_MESSAGE", issueMessage);
-        row.put("RULE_TITLE", ruleTitle);
+        Map<String, String> issueRow = new HashMap<>();
+        issueRow.put("RULE_KEY", ruleKey);
+        issueRow.put("ISSUE_TYPE", issueType);
+        issueRow.put("COMMIT", ref);
+        issueRow.put("FILE_PATH", path);
+        issueRow.put("GITHUB_ORG", orga);
+        issueRow.put("GITHUB_PRJ", project);
+        issueRow.put("LINE_NUMBER", "" + lineNumber);
+        issueRow.put("ISSUE_MESSAGE", issueMessage);
+        issueRow.put("RULE_TITLE", ruleTitle);
 
-        rows.add(InsertAllRequest.RowToInsert.of(row));
+        issueRows.add(InsertAllRequest.RowToInsert.of(issueRow));
       }
     } catch (RuntimeException e) {
       System.err.println("Got error while processing: " + e);
