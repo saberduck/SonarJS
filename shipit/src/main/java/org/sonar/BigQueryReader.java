@@ -34,7 +34,6 @@ public class BigQueryReader {
   private static final Analyzer analyzer = new Analyzer();
   private static final List<InsertAllRequest.RowToInsert> rows = new ArrayList<>();
   private static Table resultTable;
-  private static final RateLimiter rateLimiter = RateLimiter.create(20);
 
   public static void main(String[] args) throws Exception {
     int totalWorkers = Integer.parseInt(args[0]);
@@ -58,8 +57,6 @@ public class BigQueryReader {
       try {
         TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize - processed), BigQuery.TableDataListOption.startIndex(startIndex + processed));
         for (FieldValueList values : result.getValues()) {
-          rateLimiter.acquire();
-
           System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
           process(values);
 
