@@ -81,7 +81,7 @@ public class BigQueryReader {
         int lineNumber = issue.line;
         String issueType = issueTypeToString(issue.type);
 
-        System.out.println("      - (" + ruleKey + ") " + issueMessage + " at line " + lineNumber + " type: " + issue.type);
+        System.out.println("      - (" + ruleKey + ") " + issueMessage + " at line " + lineNumber + " type: " + issueType);
       }
     } catch (RuntimeException e) {
       System.err.println("Got error: " + e);
