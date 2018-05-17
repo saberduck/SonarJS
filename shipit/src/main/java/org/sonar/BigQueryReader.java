@@ -55,18 +55,23 @@ public class BigQueryReader {
 
     int processed = 0;
     while (processed < pageSize) {
-      TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize - processed), BigQuery.TableDataListOption.startIndex(startIndex + processed));
-      for (FieldValueList values : result.getValues()) {
-        rateLimiter.acquire();
+      try {
+        TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize - processed), BigQuery.TableDataListOption.startIndex(startIndex + processed));
+        for (FieldValueList values : result.getValues()) {
+          rateLimiter.acquire();
 
-        System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
-        process(values);
+          System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
+          process(values);
 
-        processed++;
+          processed++;
 
-        if (rows.size() > insertBatchSize) {
-          persistRows();
+          if (rows.size() > insertBatchSize) {
+            persistRows();
+          }
         }
+      } catch (RuntimeException e) {
+        // BigQuery IO issues, cool down
+        Thread.sleep(10000);
       }
     }
 
