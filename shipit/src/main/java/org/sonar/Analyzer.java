@@ -22,6 +22,8 @@ package org.sonar;
 import com.google.gson.Gson;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectStreamException;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -40,18 +42,22 @@ import org.sonar.plugins.javascript.api.visitors.FileIssue;
 import org.sonar.plugins.javascript.api.visitors.LineIssue;
 import org.sonar.plugins.javascript.api.visitors.PreciseIssue;
 
-public class Analyzer {
+public class Analyzer implements Serializable {
 
   static Gson gson = new Gson();
+  static final String PROFILE_JSON = "org/sonar/l10n/javascript/rules/javascript/Sonar_way_profile.json";
 
-  Map<JavaScriptCheck, Metadata> metadatas = new HashMap<>();
+  final transient Map<JavaScriptCheck, Metadata> metadatas = new HashMap<>();
 
-  private static final String PROFILE_JSON = "org/sonar/l10n/javascript/rules/javascript/Sonar_way_profile.json";
-  private final List<JavaScriptCheck> checks;
+  final transient List<JavaScriptCheck> checks;
 
   Analyzer() {
     checks = getChecks();
     System.out.println("Found " + checks.size() + " checks");
+  }
+
+  Object readResolve() throws ObjectStreamException {
+    return new Analyzer();
   }
 
   List<Issue> analyze(String input) {
@@ -159,9 +165,24 @@ public class Analyzer {
   }
 
   enum IssueType {
-    CODE_SMELL,
-    BUG,
-    VULNERABILITY
+    CODE_SMELL {
+      @Override
+      public String toString() {
+        return "Code Smell";
+      }
+    },
+    BUG {
+      @Override
+      public String toString() {
+        return "Bug";
+      }
+    },
+    VULNERABILITY {
+      @Override
+      public String toString() {
+        return "Vulnerability";
+      }
+    }
   }
 
   static class Metadata {
@@ -170,7 +191,7 @@ public class Analyzer {
     IssueType type;
   }
 
-  static class Issue {
+  static class Issue implements Serializable {
     String ruleTitle;
     String ruleKey;
     IssueType type;
@@ -178,7 +199,7 @@ public class Analyzer {
     Integer line;
     String org;
     String project;
-    String sha;
+    String commit;
     String path;
   }
 

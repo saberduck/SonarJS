@@ -19,17 +19,23 @@
  */
 package org.sonar;
 
+import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableSchema;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.Validation.Required;
+import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 
 public class MainDataflow {
@@ -46,43 +52,94 @@ public class MainDataflow {
    *
    * <p>Inherits standard configuration options.
    */
-  public interface WordCountOptions extends PipelineOptions {
+  public interface AnalysisOptions extends PipelineOptions {
 
-    /**
-     * By default, this example reads from a public dataset containing the text of
-     * King Lear. Set this option to choose a different input file or glob.
-     */
-    @Description("Path of the file to read from")
-    @Default.String("gs://apache-beam-samples/shakespeare/kinglear.txt")
-    String getInputFile();
+    @Description("Table spec to read input")
+    @Default.String("project-test-199515:github_us.massimoTest")
+    ValueProvider<String> getInputTableSpec();
+    void setInputTableSpec(ValueProvider<String> value);
 
-    void setInputFile(String value);
-
-    /**
-     * Set this required option to specify where to write the output.
-     */
-    @Description("Path of the file to write to")
-    @Required
-    String getOutput();
-
-    void setOutput(String value);
+    @Description("Table spec to write the output to")
+    ValueProvider<String> getOutputTableSpec();
+    void setOutputTableSpec(ValueProvider<String> value);
   }
 
+
   public static void main(String[] args) {
-    WordCountOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
-      .as(WordCountOptions.class);
+    AnalysisOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
+      .as(AnalysisOptions.class);
+
+    //schema
+    List<TableFieldSchema> fields = new ArrayList<>();
+    fields.add(new TableFieldSchema().setName("RULE_KEY").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("RULE_TITLE").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("ISSUE_MESSAGE").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("LINE_NUMBER").setType("INTEGER"));
+    fields.add(new TableFieldSchema().setName("ISSUE_TYPE").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("GITHUB_PRJ").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("GITHUB_ORG").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("FILE_PATH").setType("STRING"));
+    fields.add(new TableFieldSchema().setName("COMMIT").setType("STRING"));
+    TableSchema schema = new TableSchema().setFields(fields);
+
+
+    runPipeline(schema, options);
+  }
+
+  private static void runPipeline(TableSchema schema, AnalysisOptions options) {
     Pipeline p = Pipeline.create(options);
 
-    p.apply(BigQueryIO.read().from("project-test-199515:github_us.massimoTest"))
-      .apply(ParDo.of(new DoFn<TableRow, String>() {
-                        @DoFn.ProcessElement
-                        public void processElement(ProcessContext c, BoundedWindow window) {
-                          c.output(c.element().get("repo_name").toString());
-                        }
-                      }
-      ))
-      .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+    Analyzer analyzer = new Analyzer();
+
+    p.apply(BigQueryIO.readTableRows().from(options.getInputTableSpec()))
+      .apply("Analysing", ParDo.of(new Analysis(analyzer)))
+      .apply("Transform", MapElements.via(new IssueToRow()))
+      .apply("WriteBigQuery", BigQueryIO.writeTableRows().withSchema(schema).withoutValidation()
+        .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+        .to(options.getOutputTableSpec()));
 
     p.run().waitUntilFinish();
+  }
+
+  static class IssueToRow extends SimpleFunction<Analyzer.Issue, TableRow> {
+
+    @Override
+    public TableRow apply(Analyzer.Issue input) {
+      TableRow row = new TableRow()
+        .set("RULE_KEY", input.ruleKey)
+        .set("RULE_TITLE", input.ruleTitle)
+        .set("ISSUE_MESSAGE", input.message)
+        .set("LINE_NUMBER", input.line)
+        .set("ISSUE_TYPE", input.type.toString())
+        .set("GITHUB_PRJ", input.project)
+        .set("GITHUB_ORG", input.org)
+        .set("FILE_PATH", input.path)
+        .set("COMMIT", input.commit);
+
+      return row;
+    }
+  }
+
+  private static class Analysis extends DoFn<TableRow, Analyzer.Issue> {
+    private final Analyzer analyzer;
+
+    public Analysis(Analyzer analyzer) {
+      this.analyzer = analyzer;
+    }
+
+    @ProcessElement
+    public void processElement(ProcessContext c, BoundedWindow window) {
+      TableRow row = c.element();
+      String[] repoName = row.get("repo_name").toString().split("/");
+      String source = row.get("content").toString();
+      List<Analyzer.Issue> issues = analyzer.analyze(source);
+      for (Analyzer.Issue issue : issues) {
+        issue.org = repoName[0];
+        issue.project = repoName[1];
+        issue.path = row.get("path").toString();
+        issue.commit = row.get("ref").toString();
+        c.output(issue);
+      }
+    }
   }
 }
