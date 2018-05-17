@@ -21,13 +21,18 @@ package org.sonar;
 
 import com.google.cloud.bigquery.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BigQueryReader {
 
   static final String PROJECT_ID = "project-test-199515";
 
   private static final Analyzer analyzer = new Analyzer();
+  private static final List<InsertAllRequest.RowToInsert> rows = new ArrayList<>();
+  private static Table resultTable;
 
   public static void main(String[] args) throws Exception {
     args = new String[] { "1", "0"};
@@ -35,8 +40,11 @@ public class BigQueryReader {
     int totalWorkers = Integer.parseInt(args[0]);
     int workerId = Integer.parseInt(args[1]);
 
+    int insertBatchSize = 1000;
+
     BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
     Table issuesTable = bigquery.getTable("github_us", "sample_js_files_and_contents");
+    resultTable = bigquery.getTable("github_eu", "issues_copy_dinesh");
 
     TableResult result = issuesTable.list();
     int total = 0;
@@ -47,10 +55,28 @@ public class BigQueryReader {
         process(values);
 
         processed++;
+
+        if (rows.size() > insertBatchSize) {
+          persistRows();
+        }
       }
       total++;
     }
 
+  }
+
+  private static void persistRows() {
+    try {
+      InsertAllResponse response = resultTable.insert(rows);
+      if (response.hasErrors()) {
+        System.out.println("Error while persisting the batch! " + response.toString());
+      }
+
+      rows.clear();
+    } catch (RuntimeException e) {
+      System.err.println("Got error while persisting: " + e);
+      e.printStackTrace();
+    }
   }
 
   private static void process(FieldValueList values) {
@@ -82,9 +108,22 @@ public class BigQueryReader {
         String issueType = issueTypeToString(issue.type);
 
         System.out.println("      - (" + ruleKey + ") " + issueMessage + " at line " + lineNumber + " type: " + issueType);
+
+        Map<String, String> row = new HashMap<>();
+        row.put("RULE_KEY", ruleKey);
+        row.put("ISSUE_TYPE", issueType);
+        row.put("COMMIT", ref);
+        row.put("FILE_PATH", path);
+        row.put("GITHUB_ORG", orga);
+        row.put("GITHUB_PRJ", project);
+        row.put("LINE_NUMBER", "" + lineNumber);
+        row.put("ISSUE_MESSAGE", issueMessage);
+        row.put("RULE_TITLE", ruleTitle);
+
+        rows.add(InsertAllRequest.RowToInsert.of(row));
       }
     } catch (RuntimeException e) {
-      System.err.println("Got error: " + e);
+      System.err.println("Got error while processing: " + e);
       e.printStackTrace();
     }
   }
