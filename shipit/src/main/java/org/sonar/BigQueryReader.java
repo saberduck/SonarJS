@@ -37,8 +37,6 @@ public class BigQueryReader {
   private static final RateLimiter rateLimiter = RateLimiter.create(20);
 
   public static void main(String[] args) throws Exception {
-    args = new String[] { "350", "0", "issues_dinesh" };
-
     int totalWorkers = Integer.parseInt(args[0]);
     int workerId = Integer.parseInt(args[1]);
     String outputTable = args[2];
