@@ -21,6 +21,7 @@ package org.sonar;
 
 import com.google.cloud.bigquery.*;
 import com.google.common.util.concurrent.RateLimiter;
+import org.apache.commons.lang.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -100,13 +101,15 @@ public class BigQueryReader {
       String orga = repo_name;
       String project = repo_name;
 
+      int lines = 1 + StringUtils.countMatches(content, "\n");
+
       int slash = repo_name.indexOf('/');
       if (slash != -1) {
         orga = repo_name.substring(0, slash);
         project = repo_name.substring(slash + 1);
       }
 
-      System.out.println("  repo_name: " + repo_name + ", orga: " + orga + ", project: " + project + ", ref: " + ref + ", path: " + path + ", content length: " + content.length());
+      System.out.println("  repo_name: " + repo_name + ", orga: " + orga + ", project: " + project + ", ref: " + ref + ", path: " + path + ", content length: " + content.length() + ", lines: " + lines);
 
       List<Analyzer.Issue> issues = analyzer.analyze(content);
 
