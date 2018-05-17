@@ -24,13 +24,13 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.MapElements;
@@ -52,11 +52,12 @@ public class MainDataflow {
    *
    * <p>Inherits standard configuration options.
    */
-  public interface AnalysisOptions extends PipelineOptions {
+  public interface AnalysisOptions extends DataflowPipelineOptions {
 
     @Description("Table spec to read input")
     @Default.String("project-test-199515:github_us.massimoTest")
     ValueProvider<String> getInputTableSpec();
+
     void setInputTableSpec(ValueProvider<String> value);
 
     @Description("Table spec to write the output to")
@@ -87,6 +88,8 @@ public class MainDataflow {
   }
 
   private static void runPipeline(TableSchema schema, AnalysisOptions options) {
+    options.setMaxNumWorkers(32);
+    options.setWorkerMachineType("n1-standard-16");
     Pipeline p = Pipeline.create(options);
 
     Analyzer analyzer = new Analyzer();
@@ -95,6 +98,7 @@ public class MainDataflow {
       .apply("Analysing", ParDo.of(new Analysis(analyzer)))
       .apply("Transform", MapElements.via(new IssueToRow()))
       .apply("WriteBigQuery", BigQueryIO.writeTableRows().withSchema(schema).withoutValidation()
+        .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
         .to(options.getOutputTableSpec()));
 
@@ -129,16 +133,20 @@ public class MainDataflow {
 
     @ProcessElement
     public void processElement(ProcessContext c, BoundedWindow window) {
-      TableRow row = c.element();
-      String[] repoName = row.get("repo_name").toString().split("/");
-      String source = row.get("content").toString();
-      List<Analyzer.Issue> issues = analyzer.analyze(source);
-      for (Analyzer.Issue issue : issues) {
-        issue.org = repoName[0];
-        issue.project = repoName[1];
-        issue.path = row.get("path").toString();
-        issue.commit = row.get("ref").toString();
-        c.output(issue);
+      try {
+        TableRow row = c.element();
+        String[] repoName = row.get("repo_name").toString().split("/");
+        String source = row.get("content").toString();
+        List<Analyzer.Issue> issues = analyzer.analyze(source);
+        for (Analyzer.Issue issue : issues) {
+          issue.org = repoName[0];
+          issue.project = repoName[1];
+          issue.path = row.get("path").toString();
+          issue.commit = row.get("ref").toString();
+          c.output(issue);
+        }
+      } catch (Throwable e) {
+        // ignore
       }
     }
   }
