@@ -82,9 +82,7 @@ public class Analyzer {
   JavaScriptCheck createCheck(Class rule) {
     try {
       JavaScriptCheck instance = (JavaScriptCheck) rule.newInstance();
-      Metadata metadata = new Metadata();
-      metadata.ruleKey = ruleKey(rule);
-      metadata.type = issueType(metadata.ruleKey);
+      Metadata metadata = ruleMetadata(ruleKey(rule));
       metadatas.put(instance, metadata);
       return instance;
     } catch (Exception e) {
@@ -92,11 +90,11 @@ public class Analyzer {
     }
   }
 
-  private static IssueType issueType(String ruleKey) {
+  private static Metadata ruleMetadata(String ruleKey) {
     String jsonFile = "org/sonar/l10n/javascript/rules/javascript/" + ruleKey + ".json";
     InputStream resource = Main.class.getClassLoader().getResourceAsStream(jsonFile);
-    RuleJson ruleJson = gson.fromJson(new InputStreamReader(resource), RuleJson.class);
-    return ruleJson.type;
+    Metadata ruleJson = gson.fromJson(new InputStreamReader(resource), Metadata.class);
+    return ruleJson;
   }
 
   static boolean isRuleInProfile(Class rule, Set<String> sonarWayRuleKeys) {
@@ -121,7 +119,8 @@ public class Analyzer {
   Issue toIssue(org.sonar.plugins.javascript.api.visitors.Issue jsIssue) {
     Metadata checkMetadata = metadatas.get(jsIssue.check());
     Issue issue = new Issue();
-    issue.ruleKey = checkMetadata.ruleKey;
+    issue.ruleTitle = checkMetadata.title;
+    issue.ruleKey = checkMetadata.sqKey;
     issue.type = checkMetadata.type;
     issue.message = message(jsIssue);
     issue.line = line(jsIssue);
@@ -166,15 +165,13 @@ public class Analyzer {
   }
 
   static class Metadata {
-    String ruleKey;
-    IssueType type;
-  }
-
-  static class RuleJson {
+    String title;
+    String sqKey;
     IssueType type;
   }
 
   static class Issue {
+    String ruleTitle;
     String ruleKey;
     IssueType type;
     String message;
