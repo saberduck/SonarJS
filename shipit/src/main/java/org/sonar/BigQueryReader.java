@@ -51,7 +51,7 @@ public class BigQueryReader {
     int processed = 0;
     for (FieldValueList values: result.iterateAll()) {
       if (total % totalWorkers == workerId) {
-        System.out.println("Processed so far: " + processed + " out of " + total + " seen");
+        System.out.println("Processed so far: " + processed + " out of " + total + " seen, rows buffer: " + rows.size());
         process(values);
 
         processed++;
