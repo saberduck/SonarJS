@@ -37,6 +37,8 @@ public class BigQueryReader {
   private static final RateLimiter rateLimiter = RateLimiter.create(20);
 
   public static void main(String[] args) throws Exception {
+    args = new String[] { "350", "0", "issues_dinesh" };
+
     int totalWorkers = Integer.parseInt(args[0]);
     int workerId = Integer.parseInt(args[1]);
     String outputTable = args[2];
@@ -53,18 +55,20 @@ public class BigQueryReader {
 
     System.out.println("Initial stats: " + totalRows + " total rows, " + totalWorkers + " total workers, worker id = " + workerId + ", start index = " + startIndex);
 
-    TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize), BigQuery.TableDataListOption.startIndex(startIndex));
     int processed = 0;
-    for (FieldValueList values: result.getValues()) {
-      rateLimiter.acquire();
+    while (processed < pageSize) {
+      TableResult result = issuesTable.list(BigQuery.TableDataListOption.pageSize(pageSize - processed), BigQuery.TableDataListOption.startIndex(startIndex + processed));
+      for (FieldValueList values : result.getValues()) {
+        rateLimiter.acquire();
 
-      System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
-      process(values);
+        System.out.println("Progress: " + processed + " / " + pageSize + " (" + ((processed * 100.0) / pageSize) + "%), pending issues row buffer: " + rows.size());
+        process(values);
 
-      processed++;
+        processed++;
 
-      if (rows.size() > insertBatchSize) {
-        persistRows();
+        if (rows.size() > insertBatchSize) {
+          persistRows();
+        }
       }
     }
 
