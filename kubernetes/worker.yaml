@@ -33,7 +33,7 @@ spec:
           value: /var/secrets/google/key.json
         command: ["sh", "-c"]
         args:
-        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub2/shipit-dinesh.jar\" -o shipit.jar &&
+        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub3/shipit-dinesh.jar\" -o shipit.jar &&
            java -jar shipit.jar $WORKER_TOTAL $WORKER_ID $OUTPUT_TABLE;
            sleep 600
           "
