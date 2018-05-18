@@ -35,7 +35,8 @@ spec:
           value: /var/secrets/google/key.json
         command: ["sh", "-c"]
         args:
-        - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub4/shipit-dinesh.jar\" -o shipit.jar &&
+        - "sleep $[ ( $RANDOM % 300 ) + 1 ]s &&
+           curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub4/shipit-dinesh.jar\" -o shipit.jar &&
            java -Xmx2300M -jar shipit.jar $WORKER_TOTAL $WORKER_ID $ISSUES_TABLE $MEASURES_TABLE;
            sleep 600
           "
