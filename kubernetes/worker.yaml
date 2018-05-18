@@ -36,7 +36,7 @@ spec:
         command: ["sh", "-c"]
         args:
         - "curl -L \"https://github.com/saberduck/SonarJS/releases/download/kub4/shipit-dinesh.jar\" -o shipit.jar &&
-           java -Xmx3G -jar shipit.jar $WORKER_TOTAL $WORKER_ID $ISSUES_TABLE $MEASURES_TABLE;
+           java -Xmx2300M -jar shipit.jar $WORKER_TOTAL $WORKER_ID $ISSUES_TABLE $MEASURES_TABLE;
            sleep 600
           "
         resources:
